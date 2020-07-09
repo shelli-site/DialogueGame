@@ -32,7 +32,7 @@ public class MatchUp {
     private GameScript script;
     private String output;
     private String chapter;
-    private Map<String, Long> variables;
+    private Map<String, Object> variables;
 
     public MatchUp(String output, GameScript script) {
         this.output = output;
@@ -40,7 +40,7 @@ public class MatchUp {
         this.variables = new HashMap<>();
     }
 
-    public MatchUp(String chapter, String output, Map<String, Long> vars) {
+    public MatchUp(String chapter, String output, Map<String, Object> vars) {
         this.chapter = chapter;
         this.output = output;
         this.variables = vars;
@@ -53,7 +53,7 @@ public class MatchUp {
      * @param player
      * @param vars
      */
-    void displayStage(Stage stage, String player, Map<String, Long> vars) {
+    void displayStage(Stage stage, String player, Map<String, Object> vars) {
         String story = Optional.ofNullable(stage).map(Stage::getStory).orElse("该小节没有故事");
         displayCustom(stage, story, player, vars);
     }
@@ -66,13 +66,13 @@ public class MatchUp {
      * @param player
      * @param vars
      */
-    void displayCustom(Stage stage, String defMsg, String player, Map<String, Long> vars) {
+    void displayCustom(Stage stage, String defMsg, String player, Map<String, Object> vars) {
         defMsg = defMsg.replace("@sender", "@" + player).replace("@title", script.getTitle());
         for (String key : vars.keySet()) {
             defMsg = defMsg.replace("@" + key, vars.get(key).toString());
         }
         for (String key : script.getConstants().keySet()) {
-            defMsg = defMsg.replace("@" + key, vars.get(key).toString());
+            defMsg = defMsg.replace("@" + key, script.getConstants().get(key).toString());
         }
         String template = "#### [title]\n[story]\n";
         String output = template.replace("[title]", Objects.isNull(stage) ? "未知章节" : stage.getChapter()).replace("[story]", defMsg);
@@ -90,7 +90,7 @@ public class MatchUp {
     public static boolean chapterMatch(String template, String compare) {
         if (Objects.isNull(template) || "*".equals(template.trim())) {
             return true;
-        } else if (template.matches("\\.\\*")) {
+        } else if (template.matches(".+\\.\\*")) {
             template = template.replace(".*", "").trim();
             Float templateNum = Float.valueOf(template);
             Float compareNum = Float.valueOf(compare);
@@ -112,7 +112,7 @@ public class MatchUp {
      * @param chapter
      * @param vars
      */
-    MatchUp proceed(Stage stage, String input, String chapter, Map<String, Long> vars) {
+    MatchUp proceed(Stage stage, String input, String chapter, Map<String, Object> vars) {
         List<DefaultCondition> defaults = script.getDefaults();
         List<DynamicCondition> dynamics = script.getDynamics();
         List<String> variables = script.getVariables();
@@ -170,12 +170,12 @@ public class MatchUp {
      *
      * @return
      */
-    private MatchUp process(BaseChoice choice, String chapter, Map<String, Long> vars, List<String> variables, List<DynamicCondition> dynamics) {
+    private MatchUp process(BaseChoice choice, String chapter, Map<String, Object> vars, List<String> variables, List<DynamicCondition> dynamics) {
         MatchUp ret = new MatchUp(chapter, "", vars);
         // 记录回合数: rounds
         String roundsVar = "rounds";
         if (variables.indexOf(roundsVar) != -1) {
-            vars.put(roundsVar, Optional.ofNullable(vars.get(roundsVar)).map(l -> l + 1L).orElse(0L));
+            vars.put(roundsVar, Optional.ofNullable(vars.get(roundsVar)).map(l -> Long.parseLong(l.toString()) + 1L).orElse(0L));
             ret.setVariables(vars);
         }
         // 执行选项
@@ -222,9 +222,13 @@ public class MatchUp {
     private Object evalEx(String cmd, List<String> variables, MatchUp ret) {
         ArrayList<String> cmdLines = new ArrayList<>();
         // 因为需要初始化所有变量，所以要遍历整个变量声明列表
-        variables.forEach(element -> cmdLines.add("var " + element + " = " + JSON.toJSONString(ret.getVariables().get(element))));
+        variables.forEach(element -> {
+            String value = JSON.toJSONString(ret.getVariables().get(element));
+            if ("null".equals(value)) value = "undefined";
+            cmdLines.add("var " + element + " = " + value);
+        });
         // 常量
-        this.script.getConstants().keySet().forEach((key) -> cmdLines.add("var " + key + " = " + JSON.toJSONString(script.getConstants().get(key))));
+        this.script.getConstants().keySet().forEach((key) -> cmdLines.add("var " + key + " = " + JSON.toJSONString(Optional.ofNullable(script.getConstants().get(key)).orElse("undefined"))));
         cmdLines.add(cmd);
         String cmdCode = CollUtil.join(cmdLines, ";\n");
         log.debug("\n[evalex begin]\n {} \n[evalex end]\n", cmdCode);
@@ -246,7 +250,7 @@ public class MatchUp {
      * @param savechg
      * @return
      */
-    private Object evalEx(String cmd, List<String> variables, MatchUp ret, Map<String, Long> vars, Boolean savechg) {
+    private Object evalEx(String cmd, List<String> variables, MatchUp ret, Map<String, Object> vars, Boolean savechg) {
         Object evalRet = this.evalEx(cmd, variables, ret);
         // 原地保存修改
         if (savechg) {
@@ -254,7 +258,7 @@ public class MatchUp {
             for (String element : variables) {
                 if (StringUtils.nonBlank(element)) {
                     try {
-                        vars.put(element, Long.parseLong(engine.eval(element).toString()));
+                        vars.put(element, engine.eval(element).toString());
                     } catch (ScriptException e) {
                         log.error(e.getMessage());
                         e.printStackTrace();
@@ -273,7 +277,7 @@ public class MatchUp {
      * @param vars
      * @param variables
      */
-    private boolean execute(BaseChoice choice, MatchUp ret, Map<String, Long> vars, List<String> variables) {
+    private boolean execute(BaseChoice choice, MatchUp ret, Map<String, Object> vars, List<String> variables) {
         boolean varChanged = false;
         // action 可以是 list(一组动作)、string(单个动作)
         // param 的类型和长度要和 action 保持一致
@@ -314,7 +318,7 @@ public class MatchUp {
                     // 变量增加，章节不变
                     varChanged = true;
                     String key1 = paramSet.get(index);
-                    vars.put(key1, Optional.ofNullable(vars.get(key1)).map(v -> v + 1).orElse(1L));
+                    vars.put(key1, Optional.ofNullable(vars.get(key1)).map(v -> Long.parseLong(v.toString()) + 1).orElse(1L));
                     if (StringUtils.nonBlank(choice.getDescription())) {
                         ret.setOutput(choice.getDescription());
                     }
@@ -324,7 +328,7 @@ public class MatchUp {
                     // 变量减少，章节不变
                     varChanged = true;
                     String key2 = paramSet.get(index);
-                    vars.put(key2, Optional.ofNullable(vars.get(key2)).map(v -> v - 1).orElse(1L));
+                    vars.put(key2, Optional.ofNullable(vars.get(key2)).map(v -> Long.parseLong(v.toString()) - 1).orElse(1L));
                     if (StringUtils.nonBlank(choice.getDescription())) {
                         ret.setOutput(choice.getDescription());
                     }
@@ -341,7 +345,7 @@ public class MatchUp {
                         }
                     }
                     if (StringUtils.nonBlank(varName)) {
-                        vars.put(varName, Float.valueOf(evalEx(paramSet.get(index), variables, ret).toString()).longValue());
+                        vars.put(varName, evalEx(paramSet.get(index), variables, ret).toString());
                     }
                     if (StringUtils.nonBlank(choice.getDescription())) {
                         ret.setOutput(choice.getDescription());
@@ -374,7 +378,7 @@ public class MatchUp {
     public static MatchUp play(String input, GameProfile profile, GameScript script) {
         String player = profile.getPlayer();
         String chapter = profile.getChapter();
-        Map<String, Long> vars = profile.getVariables();
+        Map<String, Object> vars = profile.getVariables();
         log.debug("玩家: {}, 当前章节: {}, 输入: {}", player, chapter, input);
         String chapterAfter = chapter;
         MatchUp current = new MatchUp("", script);

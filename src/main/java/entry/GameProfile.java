@@ -17,7 +17,7 @@ public class GameProfile {
     private String player;
     private List<String> inputs;
     private String chapter;
-    private Map<String, Long> variables;
+    private Map<String, Object> variables;
 
     public GameProfile(String player) {
         this.player = player;
