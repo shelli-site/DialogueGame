@@ -31,6 +31,54 @@ public class TextGame {
         }
     }
 
+    /**
+     * 方法交互（初始化）
+     *
+     * @param input
+     * @return
+     */
+    public String initName(String name) {
+        loadScript(scriptFileName);
+        profile = Save.loadFromDisk(profileFileName);
+        // 新开存档
+        if (Objects.isNull(profile)) {
+            String player = name;
+            if (StringUtils.isBlank(player)) {
+                System.out.println("那就用默认名称吧～");
+                player = "玩家";
+            }
+            profile = new GameProfile(player);
+        }
+        // 继续游戏
+        scene = MatchUp.play("", profile, script);
+        return scene.getOutput();
+    }
+
+    /**
+     * 方法交互
+     *
+     * @param input
+     * @return
+     */
+    public String interactive(String input) {
+        if ("exit".equals(input) || "quit".equals(input) || "退出".equals(input)) {
+            return null;
+        }
+        // 对局
+        profile.getInputs().add(input);
+        Save.saveToDisk(profileFileName, profile);
+        scene = MatchUp.play(input, profile, script);
+        // 存档
+        profile.setChapter(scene.getChapter());
+        profile.setVariables(scene.getVariables());
+        Save.saveToDisk(profileFileName, profile);
+        // 返回剧情
+        return scene.getOutput();
+    }
+
+    /**
+     * 命令行式交互
+     */
     public void play() {
         log.debug("开始 scriptFileName:{}, profileFileName:{}", scriptFileName, profileFileName);
         loadScript(scriptFileName);
