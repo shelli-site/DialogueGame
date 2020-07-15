@@ -1,7 +1,6 @@
 package play;
 
 import cn.hutool.core.collection.CollUtil;
-import com.alibaba.fastjson.JSON;
 import entry.GameProfile;
 import entry.GameScript;
 import entry.scripts.DefaultCondition;
@@ -13,6 +12,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import utils.JSON;
 import utils.StringUtils;
 
 import javax.script.ScriptEngine;
